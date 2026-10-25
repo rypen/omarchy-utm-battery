@@ -37,6 +37,11 @@ printf 'TARGET="%s" FSTYPE="9p" SOURCE="share"\n' "$mounted" > "$tmp/mounts"
 got=$(run "$script" status)
 assert_eq "$got" "mounted $mounted" "reports a mounted share"
 
+log="$tmp/umount-log"
+got=$(run env MOUNT_SHARE_DRY=1 MOUNT_SHARE_LOG="$log" "$script" unmount)
+assert_eq "$got" "unmounted" "plans an unmount"
+assert_eq "$(cat "$log")" "umount $mounted" "records the mounted directory"
+
 : > "$tmp/mounts"
 got=$(run "$script" status)
 assert_eq "$got" "unmounted 9p share" "reports an unmounted share"

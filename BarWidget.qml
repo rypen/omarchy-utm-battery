@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -33,6 +34,7 @@ Panel {
   property string shareDir: ""
   property string shareState: "none"
   property string mountDir: ""
+  property bool wantMounted: false
   property bool mountRunning: false
   property string mountMessage: ""
   property string watchPath: ""
@@ -140,10 +142,39 @@ Panel {
 
   function mountChosen() {
     if (mountRunning || shareState !== "unmounted" || mountDir === "") return
+    wantMounted = true
     mountRunning = true
     mountMessage = ""
     mountProcess.command = [mountHelper, "mount", mountDir]
     mountProcess.running = true
+  }
+
+  function unmountShare() {
+    if (mountRunning || shareState !== "mounted") return
+    wantMounted = false
+    mountRunning = true
+    mountMessage = ""
+    mountProcess.command = [mountHelper, "unmount"]
+    mountProcess.running = true
+  }
+
+  function toggleShare() {
+    if (mountRunning || shareState === "none") return
+    if (shareState === "mounted") unmountShare()
+    else mountChosen()
+  }
+
+  function pathFromUrl(url) {
+    var text = String(url || "")
+    if (text.indexOf("file://") === 0) text = decodeURIComponent(text.substring(7))
+    return text
+  }
+
+  function chooseMountDir() {
+    close()
+    var start = mountDir !== "" ? mountDir : home
+    if (start !== "") folderDialog.currentFolder = "file://" + start
+    folderDialog.open()
   }
 
   function togglePercentage() {
@@ -235,8 +266,14 @@ Panel {
       if (code === 0 && line.indexOf("mounted ") === 0) {
         root.shareState = "mounted"
         root.shareDir = line.substring(8)
+        root.wantMounted = true
         root.mountMessage = ""
         root.poll()
+      } else if (code === 0 && line === "unmounted") {
+        root.shareState = "unmounted"
+        root.shareDir = ""
+        root.wantMounted = false
+        root.mountMessage = ""
       } else if (code === 2) {
         root.mountMessage = strings.t("battery.directoryNotEmpty")
       } else {
@@ -299,86 +336,74 @@ Panel {
     content: PanelKeyCatcher {
       implicitHeight: column.implicitHeight
       anchors.fill: parent
-      blocked: mountField.activeFocus
       onCloseRequested: root.close()
 
       Column {
         id: column
         width: parent.width
-        spacing: Style.space(8)
+        spacing: Style.space(12)
 
-        Text {
+        Item {
+          id: header
           width: parent.width
-          wrapMode: Text.WordWrap
-          textFormat: Text.PlainText
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          text: root.shareState === "mounted"
-            ? strings.t("battery.mountedAt").arg(root.shareDir)
-            : (root.shareState === "unmounted" ? strings.t("battery.notMounted") : strings.t("battery.noShare"))
-        }
+          implicitHeight: hero.implicitHeight
+          readonly property bool ringVisible: false
 
-        Text {
-          visible: root.shareState === "unmounted"
-          width: parent.width
-          textFormat: Text.PlainText
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          text: strings.t("battery.chooseDirectory")
-        }
-
-        Repeater {
-          model: root.shareState === "unmounted" ? root.dirChoices : []
-          delegate: Rectangle {
-            required property string modelData
-            width: column.width
-            implicitHeight: choice.implicitHeight + Style.space(8)
-            radius: Style.cornerRadius
-            color: root.mountDir === modelData
-              ? Style.selectedFillFor(root.foreground, Color.accent)
-              : "transparent"
-
-            Text {
-              id: choice
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              leftPadding: Style.space(8)
-              rightPadding: Style.space(8)
-              textFormat: Text.PlainText
-              color: root.foreground
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              elide: Text.ElideMiddle
-              text: modelData
+          PanelHero {
+            id: hero
+            width: parent.width
+            title: strings.t("battery.shareTitle")
+            meta: root.shareState === "mounted"
+              ? strings.t("battery.mountedAt").arg(root.shareDir)
+              : (root.shareState === "unmounted" ? strings.t("battery.notMounted") : strings.t("battery.noShare"))
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+            iconComponent: Component {
+              Text {
+                textFormat: Text.PlainText
+                text: root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon
+                color: root.foreground
+                font.pixelSize: Style.font.display
+              }
             }
+            trailingControl: Component {
+              ToggleSwitch {
+                id: powerSwitch
+                checked: root.mountRunning ? root.wantMounted : root.shareState === "mounted"
+                busy: root.mountRunning
+                interactive: root.shareState !== "none"
+                foreground: hero.foreground
+                onToggled: root.toggleShare()
 
-            MouseArea {
-              anchors.fill: parent
-              onClicked: root.mountDir = modelData
+                PanelToolTip {
+                  visible: powerSwitch.containsMouse
+                  text: powerSwitch.checked ? strings.t("battery.unmount") : strings.t("battery.mount")
+                  fontFamily: hero.fontFamily
+                }
+              }
             }
           }
         }
 
-        TextField {
-          id: mountField
-          visible: root.shareState === "unmounted"
+        Text {
+          visible: root.shareState === "unmounted" && root.mountDir !== ""
           width: parent.width
-          text: root.mountDir
+          textFormat: Text.PlainText
+          wrapMode: Text.Wrap
+          elide: Text.ElideMiddle
+          color: root.foreground
           font.family: root.fontFamily
-          foreground: root.foreground
-          onTextEdited: root.mountDir = text
+          font.pixelSize: Style.font.body
+          text: root.mountDir
         }
 
         Button {
           visible: root.shareState === "unmounted"
           width: parent.width
-          enabled: !root.mountRunning && root.mountDir !== ""
-          text: root.mountRunning ? strings.t("battery.mounting") : strings.t("battery.mount")
+          enabled: !root.mountRunning
+          text: strings.t("battery.chooseMountDir")
           foreground: root.foreground
-          onClicked: root.mountChosen()
+          onClicked: root.chooseMountDir()
         }
 
         Text {
@@ -393,5 +418,15 @@ Panel {
         }
       }
     }
+  }
+
+  FolderDialog {
+    id: folderDialog
+    title: strings.t("battery.chooseMountDir")
+    onAccepted: {
+      root.mountDir = root.pathFromUrl(selectedFolder)
+      root.open()
+    }
+    onRejected: root.open()
   }
 }

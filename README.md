@@ -26,4 +26,4 @@ That starts the publisher at login and writes `omarchy-utm-battery.json` in the 
 omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
 ```
 
-The icon keeps showing the last reading. Click it to open the share panel. If the UTM share is not mounted, choose a folder there and press Mount. That is what asks for the admin password. Right-click hides the percentage.
+The icon keeps showing the last reading. Click it to open the share panel. The switch mounts and unmounts the UTM share, and mounting asks for the admin password. While it is off, Choose mount dir opens a folder picker. Right-click hides the percentage.

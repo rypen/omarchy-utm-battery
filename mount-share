@@ -213,12 +213,31 @@ mount_at() {
   printf 'mounted %s\n' "$dir"
 }
 
+unmount_share() {
+  local existing
+  existing=$(mounted_target "" || true)
+  if [[ -z "$existing" ]]; then
+    printf 'unmounted\n'
+    return 0
+  fi
+  if [[ -n "${MOUNT_SHARE_DRY:-}" ]]; then
+    if [[ -n "${MOUNT_SHARE_LOG:-}" ]]; then
+      printf 'umount %s\n' "$existing" >> "$MOUNT_SHARE_LOG"
+    fi
+    printf 'unmounted\n'
+    return 0
+  fi
+  run_root umount -- "$existing"
+  printf 'unmounted\n'
+}
+
 command="${1:-status}"
 case "$command" in
   status) status_line ;;
   mount) mount_at "${2:-}" ;;
+  unmount) unmount_share ;;
   *)
-    echo "usage: mount-share status | mount <directory>" >&2
+    echo "usage: mount-share status | mount <directory> | unmount" >&2
     exit 2
     ;;
 esac

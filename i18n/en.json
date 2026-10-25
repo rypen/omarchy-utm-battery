@@ -16,6 +16,8 @@
   "battery.mount": "Mount",
   "battery.mounting": "Mounting…",
   "battery.chooseDirectory": "Mount folder",
+  "battery.chooseMountDir": "Choose mount dir",
+  "battery.unmount": "Unmount",
   "battery.directoryNotEmpty": "That folder already has files.",
   "battery.mountFailed": "Could not mount the share."
 }
