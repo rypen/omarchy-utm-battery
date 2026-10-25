@@ -30,9 +30,10 @@ BarWidget {
   property var status: null
 
   readonly property bool fresh: status && status.present === true && status.stale !== true
+  readonly property string idleIcon: "󰁺"
   readonly property var remaining: Status.estimate(status)
 
-  visible: fresh
+  visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -54,6 +55,7 @@ BarWidget {
     if (String(setting("statusFile", "") || "").trim() !== "") return
     if (shareDir !== "" || mountRunning) return
     if (Date.now() < nextMountAttempt) return
+    console.warn("ryan.utm-battery", "mount", mountHelper)
     mountRunning = true
     mountProcess.command = [mountHelper]
     mountProcess.running = true
@@ -189,7 +191,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: Status.batteryIcon(root.status)
+    text: root.fresh ? Status.batteryIcon(root.status) : root.idleIcon
     labelText: root.percentageLabel
     tooltipText: root.tooltipLabel
     active: root.fresh && root.status.state === "discharging" && root.status.percentage <= 15
