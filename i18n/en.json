@@ -5,6 +5,7 @@
   "battery.notCharging": "Not charging",
   "battery.unknown": "Unknown",
   "battery.percent": "%1%",
+  "battery.na": "N/A",
   "battery.untilFullHours": "%1 h %2 min until full",
   "battery.untilFullMinutes": "%1 min until full",
   "battery.untilEmptyHours": "%1 h %2 min until empty",

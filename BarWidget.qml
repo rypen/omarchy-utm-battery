@@ -54,8 +54,11 @@ Panel {
 
   readonly property var remaining: Status.estimate(status)
   readonly property bool dataStale: Status.isStale(status, nowMs)
+  readonly property bool shareMounted: shareState === "mounted"
+  readonly property bool shareUnmounted: shareState === "unmounted"
   readonly property string idleIcon: "󰁺"
   readonly property string staleIcon: "󰀪"
+  readonly property string unmountedPercentLabel: strings.t("battery.na", "N/A")
 
   visible: true
   implicitWidth: button.implicitWidth
@@ -222,7 +225,23 @@ Panel {
     return chargePercentLabel
   }
 
+  readonly property string barPercentageLabel: {
+    if (shareUnmounted) {
+      if (!showPercentage || verticalBar) return ""
+      return unmountedPercentLabel
+    }
+    return percentageLabel
+  }
+
+  readonly property string barGlyph: {
+    if (shareUnmounted) return staleIcon
+    if (dataStale) return staleIcon
+    if (status && status.present === true) return Status.batteryIcon(status)
+    return idleIcon
+  }
+
   readonly property string tooltipLabel: {
+    if (shareUnmounted) return strings.t("battery.notMounted")
     if (!status || status.present !== true) return strings.t("battery.notMounted")
     var lines = [chargeStateLabel, chargePercentLabel]
     if (remainingLabel !== "") lines.push(remainingLabel)
@@ -341,7 +360,7 @@ Panel {
     id: percentMetrics
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
-    text: root.percentageLabel
+    text: root.barPercentageLabel
   }
 
   WidgetButton {
@@ -352,8 +371,8 @@ Panel {
     labelVisible: false
     hasVisualContent: true
     tooltipText: root.tooltipLabel
-    active: root.dataStale || (root.status && root.status.state === "discharging" && root.status.percentage <= 15)
-    fixedWidth: root.verticalBar ? -1 : (root.percentageLabel === "" ? Style.bar.iconSlot : Math.ceil(percentMetrics.advanceWidth + Style.space(4) + Style.bar.iconSlot))
+    active: !root.shareUnmounted && (root.dataStale || (root.status && root.status.state === "discharging" && root.status.percentage <= 15))
+    fixedWidth: root.verticalBar ? -1 : (root.barPercentageLabel === "" ? Style.bar.iconSlot : Math.ceil(percentMetrics.advanceWidth + Style.space(4) + Style.bar.iconSlot))
     fixedHeight: root.verticalBar ? Style.bar.iconSlot : -1
     onPressed: function(button) {
       if (button === Qt.RightButton) root.togglePercentage()
@@ -365,13 +384,13 @@ Panel {
       spacing: Style.space(4)
 
       Text {
-        visible: root.percentageLabel !== ""
+        visible: root.barPercentageLabel !== ""
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: root.percentageLabel
+        text: root.barPercentageLabel
         font.family: button.fontFamily
         font.pixelSize: Style.font.body
-        color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+        color: root.shareUnmounted ? root.urgent : (button.active && button.useActiveColor ? button.activeColor : button.foreground)
         renderType: Text.NativeRendering
       }
 
@@ -380,14 +399,14 @@ Panel {
         anchors.verticalCenter: parent.verticalCenter
         width: Style.bar.iconCanvas
         height: Style.bar.iconCanvas
-        text: root.dataStale ? root.staleIcon : (root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon)
+        text: root.barGlyph
         fontFamily: button.fontFamily
         fontSize: Style.bar.iconFont
         paintedSize: Style.bar.iconSize
-        color: root.dataStale ? root.urgent : (button.active && button.useActiveColor ? button.activeColor : button.foreground)
+        color: root.shareUnmounted ? root.urgent : (root.dataStale ? root.urgent : (button.active && button.useActiveColor ? button.activeColor : button.foreground))
 
         SequentialAnimation on opacity {
-          running: root.dataStale
+          running: root.dataStale && !root.shareUnmounted
           loops: Animation.Infinite
           NumberAnimation { to: 0.25; duration: 400 }
           NumberAnimation { to: 1.0; duration: 400 }
@@ -472,7 +491,7 @@ Panel {
         }
 
         Column {
-          visible: root.status && root.status.present === true
+          visible: root.shareMounted && root.status && root.status.present === true
           width: parent.width
           spacing: Style.space(8)
 
@@ -481,7 +500,7 @@ Panel {
             implicitHeight: Math.max(batteryTrack.implicitHeight, percentReadout.implicitHeight)
 
             TextMetrics {
-              id: percentMetrics
+              id: panelPercentMetrics
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               text: strings.t("battery.percent").arg(I18n.formatNumber(100))
@@ -520,7 +539,7 @@ Panel {
               id: percentReadout
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              width: Math.ceil(percentMetrics.advanceWidth)
+              width: Math.ceil(panelPercentMetrics.advanceWidth)
               horizontalAlignment: LayoutMirroring.enabled ? Text.AlignLeft : Text.AlignRight
               textFormat: Text.PlainText
               color: root.foreground
