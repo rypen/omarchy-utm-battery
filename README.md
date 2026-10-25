@@ -20,13 +20,9 @@ omarchy-utm-battery stop ~/MacShare
 
 The command writes `omarchy-utm-battery.json` in that folder. `start` keeps the file current. `stop` removes it. Share the folder from the virtual machine's settings.
 
-## Install the bar widget
+## Mount the share
 
-```sh
-omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
-```
-
-Mount the shared folder at `~/Mac`. UTM tags a directory share `share`.
+Mount that folder at `~/Mac`. UTM tags a directory share `share`.
 
 Apple Virtualization:
 
@@ -40,6 +36,12 @@ QEMU:
 ```sh
 mkdir -p ~/Mac
 sudo mount -t 9p -o trans=virtio,version=9p2000.L share ~/Mac
+```
+
+## Install the bar widget
+
+```sh
+omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
 ```
 
 The widget reads `~/Mac/omarchy-utm-battery.json`. If that file is missing, it also checks `~/Shared`, `/mnt/utm`, and `/mnt/share`. The icon shows the percentage. Right-click hides it.
