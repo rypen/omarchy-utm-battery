@@ -2,7 +2,7 @@
 
 Shows a MacBook's battery on the bar of an Omarchy guest running in UTM.
 
-This repository is the bar widget. The Mac command is attached to releases as an arm64 binary. Its source is not here.
+This repository is the bar widget. The Mac command is attached to releases as arm64 and Intel binaries. Its source is not here.
 
 ## Install the Mac command
 
@@ -11,7 +11,7 @@ brew tap rypen/cli-tools
 brew install omarchy-utm-battery
 ```
 
-The tap formula downloads `omarchy-utm-battery-darwin-arm64.tar.gz` from this repository's releases and installs the binary inside it. The `v0.1.0` archive is not attached yet, so that install fails until the release and its checksum are published.
+The tap formula downloads `omarchy-utm-battery-darwin-arm64.tar.gz` or `omarchy-utm-battery-darwin-x86_64.tar.gz` from this repository's releases, matching the Mac it is installing on. The `v0.1.0` archives are not attached yet, so that install fails until the release and its checksums are published.
 
 ```sh
 omarchy-utm-battery start ~/MacShare
