@@ -55,7 +55,6 @@ BarWidget {
     if (String(setting("statusFile", "") || "").trim() !== "") return
     if (shareDir !== "" || mountRunning) return
     if (Date.now() < nextMountAttempt) return
-    console.warn("ryan.utm-battery", "mount", mountHelper)
     mountRunning = true
     mountProcess.command = [mountHelper]
     mountProcess.running = true
