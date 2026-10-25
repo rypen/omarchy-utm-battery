@@ -11,7 +11,7 @@ brew tap rypen/cli-tools
 brew install omarchy-utm-battery
 ```
 
-The tap formula downloads `omarchy-utm-battery-darwin-arm64.tar.gz` or `omarchy-utm-battery-darwin-x86_64.tar.gz` from this repository's releases, matching the Mac it is installing on. The `v0.1.0` archives are not attached yet, so that install fails until the release and its checksums are published.
+The `v0.1.0` release is not published yet, so that install fails until it is.
 
 ```sh
 omarchy-utm-battery start ~/MacShare
