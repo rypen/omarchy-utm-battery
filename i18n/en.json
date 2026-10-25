@@ -1,0 +1,12 @@
+{
+  "battery.charging": "Charging",
+  "battery.discharging": "On battery",
+  "battery.full": "Fully charged",
+  "battery.notCharging": "Not charging",
+  "battery.unknown": "Unknown",
+  "battery.percent": "%1%",
+  "battery.untilFullHours": "%1 h %2 min until full",
+  "battery.untilFullMinutes": "%1 min until full",
+  "battery.untilEmptyHours": "%1 h %2 min until empty",
+  "battery.untilEmptyMinutes": "%1 min until empty"
+}

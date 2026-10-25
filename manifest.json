@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "ryan.utm-battery",
+  "name": "Mac battery",
+  "version": "0.1.0",
+  "author": "ryan",
+  "license": "MIT",
+  "description": "Shows the MacBook battery in the Omarchy bar by reading omarchy-utm-battery.json from a UTM shared folder. While enabled, the widget re-reads that file every five seconds. It does not use the network.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Mac battery",
+    "description": "MacBook charge and charging state from a UTM shared folder.",
+    "category": "System",
+    "aliases": ["utm-battery", "mac-battery"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "statusFile": "",
+      "showPercentage": true
+    },
+    "schema": [
+      {
+        "key": "statusFile",
+        "type": "path",
+        "label": "Status file",
+        "defaultValue": "",
+        "description": "Guest path of omarchy-utm-battery.json. Empty tries ~/Mac, ~/Shared, /mnt/utm, and /mnt/share."
+      },
+      {
+        "key": "showPercentage",
+        "type": "boolean",
+        "label": "Show percentage",
+        "defaultValue": true
+      }
+    ]
+  }
+}
