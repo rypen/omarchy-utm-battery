@@ -10,14 +10,16 @@
   "battery.untilEmptyHours": "%1 h %2 min until empty",
   "battery.untilEmptyMinutes": "%1 min until empty",
   "battery.shareTitle": "Mac share",
-  "battery.notMounted": "The UTM share is not mounted.",
-  "battery.mountedAt": "Mounted at %1",
+  "battery.notMounted": "Not mounted",
+  "battery.mountedHeading": "Mounted at",
   "battery.noShare": "No UTM directory share was found.",
   "battery.mount": "Mount",
   "battery.mounting": "Mounting…",
   "battery.chooseDirectory": "Mount folder",
   "battery.chooseMountDir": "Choose mount dir",
   "battery.unmount": "Unmount",
+  "battery.stale": "Update stale",
+  "battery.staleDetail": "File not updating, check host",
   "battery.directoryNotEmpty": "That folder already has files.",
   "battery.mountFailed": "Could not mount the share."
 }

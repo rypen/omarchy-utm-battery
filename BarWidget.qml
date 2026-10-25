@@ -50,9 +50,12 @@ Panel {
   property bool probing: false
   property var status: null
   property string savedText: ""
+  property double nowMs: Date.now()
 
   readonly property var remaining: Status.estimate(status)
+  readonly property bool dataStale: Status.isStale(status, nowMs)
   readonly property string idleIcon: "󰁺"
+  readonly property string staleIcon: "󰀪"
 
   visible: true
   implicitWidth: button.implicitWidth
@@ -191,28 +194,49 @@ Panel {
       root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
-  readonly property string percentageLabel: {
-    if (!showPercentage || verticalBar || !status || status.percentage == null) return ""
+  readonly property string chargeStateLabel: {
+    if (!status || status.present !== true) return ""
+    return strings.t(Status.stateKey(status.state))
+  }
+
+  readonly property string chargePercentLabel: {
+    if (!status || status.percentage == null) return ""
     return strings.t("battery.percent").arg(I18n.formatNumber(status.percentage))
+  }
+
+  readonly property string remainingLabel: {
+    var left = remaining
+    if (!left) return ""
+    var hoursKey = left.kind === "full" ? "battery.untilFullHours" : "battery.untilEmptyHours"
+    var minutesKey = left.kind === "full" ? "battery.untilFullMinutes" : "battery.untilEmptyMinutes"
+    if (left.hours > 0) {
+      return strings.t(hoursKey)
+        .arg(I18n.formatNumber(left.hours))
+        .arg(I18n.formatNumber(left.minutes))
+    }
+    return strings.t(minutesKey).arg(I18n.formatNumber(left.minutes))
+  }
+
+  readonly property string percentageLabel: {
+    if (!showPercentage || verticalBar || chargePercentLabel === "") return ""
+    return chargePercentLabel
   }
 
   readonly property string tooltipLabel: {
     if (!status || status.present !== true) return strings.t("battery.notMounted")
-    var lines = [strings.t(Status.stateKey(status.state))]
-    lines.push(strings.t("battery.percent").arg(I18n.formatNumber(status.percentage)))
-    var left = remaining
-    if (left) {
-      var hoursKey = left.kind === "full" ? "battery.untilFullHours" : "battery.untilEmptyHours"
-      var minutesKey = left.kind === "full" ? "battery.untilFullMinutes" : "battery.untilEmptyMinutes"
-      if (left.hours > 0) {
-        lines.push(strings.t(hoursKey)
-          .arg(I18n.formatNumber(left.hours))
-          .arg(I18n.formatNumber(left.minutes)))
-      } else {
-        lines.push(strings.t(minutesKey).arg(I18n.formatNumber(left.minutes)))
-      }
-    }
+    var lines = [chargeStateLabel, chargePercentLabel]
+    if (remainingLabel !== "") lines.push(remainingLabel)
+    if (root.dataStale) lines.unshift(strings.t("battery.stale", "Update stale"))
     return lines.join("\n")
+  }
+
+  Timer {
+    interval: 1000
+    running: true
+    repeat: true
+    onTriggered: {
+      root.nowMs = Date.now()
+    }
   }
 
   Timer {
@@ -221,6 +245,7 @@ Panel {
     repeat: true
     triggeredOnStart: true
     onTriggered: {
+      root.nowMs = Date.now()
       root.refreshShare()
       root.poll()
     }
@@ -312,18 +337,63 @@ Panel {
     onFileChanged: reload()
   }
 
-  BarIconButton {
+  TextMetrics {
+    id: percentMetrics
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.body
+    text: root.percentageLabel
+  }
+
+  WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon
-    labelText: root.percentageLabel
+    text: ""
+    labelVisible: false
+    hasVisualContent: true
     tooltipText: root.tooltipLabel
-    active: root.status && root.status.state === "discharging" && root.status.percentage <= 15
-    slotSize: Style.bar.iconSlot * (root.showPercentage && !root.verticalBar ? 2 : 1)
+    active: root.dataStale || (root.status && root.status.state === "discharging" && root.status.percentage <= 15)
+    fixedWidth: root.verticalBar ? -1 : (root.percentageLabel === "" ? Style.bar.iconSlot : Math.ceil(percentMetrics.advanceWidth + Style.space(4) + Style.bar.iconSlot))
+    fixedHeight: root.verticalBar ? Style.bar.iconSlot : -1
     onPressed: function(button) {
       if (button === Qt.RightButton) root.togglePercentage()
       else root.toggle()
+    }
+
+    Row {
+      anchors.centerIn: parent
+      spacing: Style.space(4)
+
+      Text {
+        visible: root.percentageLabel !== ""
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: root.percentageLabel
+        font.family: button.fontFamily
+        font.pixelSize: Style.font.body
+        color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+        renderType: Text.NativeRendering
+      }
+
+      OpticalGlyph {
+        id: batteryGlyph
+        anchors.verticalCenter: parent.verticalCenter
+        width: Style.bar.iconCanvas
+        height: Style.bar.iconCanvas
+        text: root.dataStale ? root.staleIcon : (root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon)
+        fontFamily: button.fontFamily
+        fontSize: Style.bar.iconFont
+        paintedSize: Style.bar.iconSize
+        color: root.dataStale ? root.urgent : (button.active && button.useActiveColor ? button.activeColor : button.foreground)
+
+        SequentialAnimation on opacity {
+          running: root.dataStale
+          loops: Animation.Infinite
+          NumberAnimation { to: 0.25; duration: 400 }
+          NumberAnimation { to: 1.0; duration: 400 }
+          onRunningChanged: if (!running) batteryGlyph.opacity = 1
+        }
+      }
     }
   }
 
@@ -350,78 +420,162 @@ Panel {
         Item {
           id: header
           width: parent.width
-          implicitHeight: hero.implicitHeight
-          readonly property bool ringVisible: false
+          readonly property string heading: root.shareState === "mounted"
+            ? root.chargeStateLabel
+            : strings.t("battery.notMounted", "Not mounted")
 
-          PanelHero {
-            id: hero
-            width: parent.width
-            title: strings.t("battery.shareTitle")
-            meta: root.shareState === "mounted"
-              ? strings.t("battery.mountedAt").arg(root.shareDir)
-              : (root.shareState === "unmounted" ? strings.t("battery.notMounted") : strings.t("battery.noShare"))
+          implicitHeight: Math.max(headerIcon.implicitHeight, headingText.implicitHeight, powerSwitch.implicitHeight)
+          height: implicitHeight
+
+          Text {
+            id: headerIcon
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon
+            color: root.foreground
+            font.pixelSize: Style.font.display
+          }
+
+          Text {
+            id: headingText
+            anchors.left: headerIcon.right
+            anchors.leftMargin: Style.space(14)
+            anchors.right: powerSwitch.left
+            anchors.rightMargin: Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: header.heading
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          ToggleSwitch {
+            id: powerSwitch
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            checked: root.mountRunning ? root.wantMounted : root.shareState === "mounted"
+            busy: root.mountRunning
+            interactive: root.shareState !== "none"
             foreground: root.foreground
-            fontFamily: root.fontFamily
-            iconComponent: Component {
-              Text {
-                textFormat: Text.PlainText
-                text: root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon
-                color: root.foreground
-                font.pixelSize: Style.font.display
-              }
-            }
-            trailingControl: Component {
-              ToggleSwitch {
-                id: powerSwitch
-                checked: root.mountRunning ? root.wantMounted : root.shareState === "mounted"
-                busy: root.mountRunning
-                interactive: root.shareState !== "none"
-                foreground: hero.foreground
-                onToggled: root.toggleShare()
+            onToggled: root.toggleShare()
 
-                PanelToolTip {
-                  visible: powerSwitch.containsMouse
-                  text: powerSwitch.checked ? strings.t("battery.unmount") : strings.t("battery.mount")
-                  fontFamily: hero.fontFamily
+            PanelToolTip {
+              visible: powerSwitch.containsMouse
+              text: powerSwitch.checked ? strings.t("battery.unmount", "Unmount") : strings.t("battery.mount", "Mount")
+              fontFamily: root.fontFamily
+            }
+          }
+        }
+
+        Column {
+          visible: root.status && root.status.present === true
+          width: parent.width
+          spacing: Style.space(8)
+
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(batteryTrack.implicitHeight, percentReadout.implicitHeight)
+
+            TextMetrics {
+              id: percentMetrics
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              text: strings.t("battery.percent").arg(I18n.formatNumber(100))
+            }
+
+            Item {
+              id: batteryTrack
+              anchors.left: parent.left
+              anchors.right: percentReadout.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              implicitHeight: Math.max(Style.space(4), Math.round(Style.spacing.controlHeight * 0.14))
+              height: implicitHeight
+
+              Rectangle {
+                id: batteryTrackSurface
+                anchors.fill: parent
+                radius: height / 2
+                color: root.track
+              }
+
+              Rectangle {
+                height: batteryTrackSurface.height
+                radius: batteryTrackSurface.radius
+                width: batteryTrackSurface.width * root.batteryFraction
+                color: root.batteryLow ? root.urgent : root.foreground
+                x: LayoutMirroring.enabled ? batteryTrackSurface.width - width : 0
+
+                Behavior on width {
+                  NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
                 }
               }
             }
-          }
-        }
 
-        Text {
-          visible: root.status && root.status.present === true
-          width: parent.width
-          textFormat: Text.PlainText
-          wrapMode: Text.WordWrap
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          text: root.tooltipLabel
-        }
-
-        Item {
-          visible: root.status && root.status.present === true
-          width: parent.width
-          implicitHeight: Math.max(Style.space(4), Math.round(Style.spacing.controlHeight * 0.14))
-
-          Rectangle {
-            id: batteryTrack
-            anchors.fill: parent
-            radius: height / 2
-            color: root.track
-          }
-
-          Rectangle {
-            height: batteryTrack.height
-            radius: batteryTrack.radius
-            width: batteryTrack.width * root.batteryFraction
-            color: root.batteryLow ? root.urgent : root.foreground
-            x: LayoutMirroring.enabled ? batteryTrack.width - width : 0
-
-            Behavior on width {
-              NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
+            Text {
+              id: percentReadout
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.ceil(percentMetrics.advanceWidth)
+              horizontalAlignment: LayoutMirroring.enabled ? Text.AlignLeft : Text.AlignRight
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              text: root.chargePercentLabel
             }
+          }
+
+          Text {
+            visible: root.remainingLabel !== ""
+            width: parent.width
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            text: root.remainingLabel
+          }
+
+          Text {
+            visible: root.dataStale
+            width: parent.width
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            text: strings.t("battery.staleDetail", "File not updating, check host")
+          }
+        }
+
+        Column {
+          visible: root.shareState === "mounted" && root.shareDir !== ""
+          width: parent.width
+          spacing: Style.space(2)
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            color: Qt.darker(root.foreground, 1.4)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            elide: Text.ElideRight
+            text: strings.t("battery.mountedHeading", "Mounted at")
+          }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            elide: Text.ElideMiddle
+            text: root.shareDir
           }
         }
 
@@ -437,13 +591,15 @@ Panel {
           text: root.mountDir
         }
 
-        Button {
-          visible: root.shareState === "unmounted"
+        Text {
+          visible: root.shareState === "none"
           width: parent.width
-          enabled: !root.mountRunning
-          text: strings.t("battery.chooseMountDir")
-          foreground: root.foreground
-          onClicked: root.chooseMountDir()
+          wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          text: strings.t("battery.noShare", "No UTM directory share was found.")
         }
 
         Text {
@@ -455,6 +611,15 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           text: root.mountMessage
+        }
+
+        Button {
+          visible: root.shareState === "unmounted"
+          width: parent.width
+          enabled: !root.mountRunning
+          text: strings.t("battery.chooseMountDir")
+          foreground: root.foreground
+          onClicked: root.chooseMountDir()
         }
       }
     }

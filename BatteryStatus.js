@@ -1,6 +1,6 @@
 .pragma library
 
-var staleAfterMs = 90000
+var staleAfterMs = 15000
 var futureSkewMs = 120000
 var maxTextLength = 4096
 var maxTimeSeconds = 864000
@@ -47,6 +47,7 @@ function parseStatus(text, nowMs) {
     acConnected: parsed.acConnected,
     timeToEmptySeconds: timeToEmptySeconds,
     timeToFullSeconds: timeToFullSeconds,
+    updatedMs: updated,
     stale: skew > staleAfterMs || skew < -futureSkewMs
   }
 }
@@ -67,6 +68,13 @@ function optionalSeconds(value) {
 
 function isWholeNumber(value) {
   return typeof value === "number" && isFinite(value) && Math.floor(value) === value
+}
+
+function isStale(status, nowMs) {
+  if (!status || status.present !== true || !isWholeNumber(status.updatedMs)) return false
+  var skew = nowMs - status.updatedMs
+  if (!isFinite(skew)) return false
+  return skew > staleAfterMs || skew < -futureSkewMs
 }
 
 function stateKey(state) {
@@ -110,6 +118,7 @@ function estimate(status) {
 if (typeof module !== "undefined") {
   module.exports = {
     parseStatus: parseStatus,
+    isStale: isStale,
     stateKey: stateKey,
     batteryIcon: batteryIcon,
     estimate: estimate
