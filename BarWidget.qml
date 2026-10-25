@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 import "BatteryStatus.js" as Status
@@ -193,7 +192,7 @@ BarWidget {
     labelText: root.percentageLabel
     tooltipText: root.tooltipLabel
     active: root.fresh && root.status.state === "discharging" && root.status.percentage <= 15
-    slotSize: Style.bar.iconSlot * (root.showPercentage && !root.vertical ? 2 : 1)
+    slotSize: Commons.Style.bar.iconSlot * (root.showPercentage && !root.vertical ? 2 : 1)
     onPressed: function(button) {
       if (button === Qt.RightButton) root.togglePercentage()
       else root.poll()
