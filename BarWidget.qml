@@ -61,6 +61,7 @@ BarWidget {
 
   function poll() {
     if (probing && Date.now() - probeStarted < 4000) return
+    considerMount()
     probeStarted = Date.now()
     generation += 1
     inflight = generation
