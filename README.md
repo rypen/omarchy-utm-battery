@@ -20,28 +20,10 @@ brew services start omarchy-utm-battery
 
 That starts the publisher at login and writes `omarchy-utm-battery.json` in the saved folder. `brew services stop omarchy-utm-battery` stops it. Share the folder from the virtual machine's settings.
 
-## Mount the share
-
-Mount that folder at `~/Mac`. UTM tags a directory share `share`.
-
-Apple Virtualization:
-
-```sh
-mkdir -p ~/Mac
-sudo mount -t virtiofs share ~/Mac
-```
-
-QEMU:
-
-```sh
-mkdir -p ~/Mac
-sudo mount -t 9p -o trans=virtio,version=9p2000.L share ~/Mac
-```
-
 ## Install the bar widget
 
 ```sh
 omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
 ```
 
-The widget reads `~/Mac/omarchy-utm-battery.json`. If that file is missing, it also checks `~/Shared`, `/mnt/utm`, and `/mnt/share`. The icon shows the percentage. Right-click hides it.
+The widget uses a UTM directory share that is already mounted. Otherwise it mounts one, usually at `~/Mac`, and may ask for an admin password once. If `~/Mac` already has other files, it uses `~/.local/state/omarchy-utm-battery/share` instead. The icon shows the percentage. Right-click hides it.

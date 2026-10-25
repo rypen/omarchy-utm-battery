@@ -1,0 +1,169 @@
+#!/bin/bash
+set -euo pipefail
+
+json_name=omarchy-utm-battery.json
+sysfs="${MOUNT_SHARE_SYSFS:-/sys/bus/virtio/devices}"
+
+valid_tag() {
+  [[ "$1" =~ ^[A-Za-z0-9._-]{1,64}$ ]]
+}
+
+read_tag() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  local tag
+  tag=$(tr -d '\000\r\n' < "$file" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  valid_tag "$tag" || return 1
+  printf '%s\n' "$tag"
+}
+
+each_mount() {
+  local line target fstype source
+  if [[ -n "${MOUNT_SHARE_MOUNTS:-}" ]]; then
+    [[ -f "$MOUNT_SHARE_MOUNTS" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -n "$line" ]] || continue
+      printf '%s\n' "$line"
+    done < "$MOUNT_SHARE_MOUNTS"
+    return 0
+  fi
+  command -v findmnt >/dev/null 2>&1 || return 0
+  findmnt -n -P -t virtiofs,9p -o TARGET,FSTYPE,SOURCE 2>/dev/null || true
+}
+
+field() {
+  local line="$1" key="$2"
+  local value
+  value=$(printf '%s\n' "$line" | sed -n "s/.*${key}=\"\\([^\"]*\\)\".*/\\1/p")
+  printf '%s\n' "$value"
+}
+
+mounted_target() {
+  local want_source="$1" line source target
+  while IFS= read -r line; do
+    source=$(field "$line" SOURCE)
+    target=$(field "$line" TARGET)
+    [[ -n "$target" ]] || continue
+    if [[ -z "$want_source" || "$source" == "$want_source" ]]; then
+      if [[ -z "$want_source" && -f "$target/$json_name" ]]; then
+        printf '%s\n' "$target"
+        return 0
+      fi
+      if [[ -n "$want_source" ]]; then
+        printf '%s\n' "$target"
+        return 0
+      fi
+    fi
+  done < <(each_mount)
+  if [[ -z "$want_source" ]]; then
+    while IFS= read -r line; do
+      target=$(field "$line" TARGET)
+      [[ -n "$target" ]] || continue
+      printf '%s\n' "$target"
+      return 0
+    done < <(each_mount)
+  fi
+  return 1
+}
+
+choose_dir() {
+  local home="${HOME:-}"
+  local preferred=""
+  local fallback
+  if [[ -n "$home" ]]; then
+    preferred="$home/Mac"
+    if [[ -d "$preferred" ]] && mountpoint -q "$preferred" 2>/dev/null; then
+      printf '%s\n' "$preferred"
+      return 0
+    fi
+    if [[ ! -e "$preferred" ]] || { [[ -d "$preferred" ]] && [[ -z "$(ls -A "$preferred")" ]]; }; then
+      printf '%s\n' "$preferred"
+      return 0
+    fi
+    fallback="${XDG_STATE_HOME:-$home/.local/state}/omarchy-utm-battery/share"
+  else
+    fallback="/tmp/omarchy-utm-battery/share"
+  fi
+  printf '%s\n' "$fallback"
+}
+
+best_device() {
+  local dev driver tag fstype rank best_rank best_fstype best_tag
+  best_rank=99
+  best_fstype=""
+  best_tag=""
+  [[ -d "$sysfs" ]] || return 1
+  for dev in "$sysfs"/virtio*; do
+    [[ -e "$dev" ]] || continue
+    [[ -L "$dev/driver" ]] || continue
+    driver=$(basename "$(readlink "$dev/driver")")
+    case "$driver" in
+      virtiofs) fstype=virtiofs; rank=2 ;;
+      9pnet_virtio) fstype=9p; rank=4 ;;
+      *) continue ;;
+    esac
+    tag=$(read_tag "$dev/mount_tag") || continue
+    if [[ "$tag" == "share" ]]; then
+      rank=$((rank - 1))
+    fi
+    if (( rank < best_rank )); then
+      best_rank=$rank
+      best_fstype=$fstype
+      best_tag=$tag
+    fi
+  done
+  [[ -n "$best_tag" ]] || return 1
+  printf '%s %s\n' "$best_fstype" "$best_tag"
+}
+
+run_root() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+    return
+  fi
+  if sudo -n true 2>/dev/null; then
+    sudo -n "$@"
+    return
+  fi
+  pkexec "$@"
+}
+
+mount_share() {
+  local fstype="$1" tag="$2" dir="$3"
+  mkdir -p "$dir"
+  if mountpoint -q "$dir" 2>/dev/null; then
+    return 0
+  fi
+  if [[ "$fstype" == "virtiofs" ]]; then
+    run_root mount -t virtiofs -- "$tag" "$dir"
+  else
+    run_root mount -t 9p -o trans=virtio,version=9p2000.L,msize=104857600 -- "$tag" "$dir"
+  fi
+}
+
+existing=$(mounted_target "" || true)
+if [[ -n "$existing" ]]; then
+  printf '%s\n' "$existing"
+  exit 0
+fi
+
+device=$(best_device || true)
+if [[ -z "$device" ]]; then
+  echo "omarchy-utm-battery: no UTM directory share found" >&2
+  exit 1
+fi
+fstype=${device%% *}
+tag=${device#* }
+already=$(mounted_target "$tag" || true)
+dir=${already:-$(choose_dir)}
+
+if [[ -n "${MOUNT_SHARE_DRY:-}" ]]; then
+  printf '%s\n' "$dir"
+  if [[ -n "${MOUNT_SHARE_LOG:-}" ]]; then
+    printf '%s %s %s\n' "$fstype" "$tag" "$dir" >> "$MOUNT_SHARE_LOG"
+  fi
+  exit 0
+fi
+
+mount_share "$fstype" "$tag" "$dir"
+printf '%s\n' "$dir"

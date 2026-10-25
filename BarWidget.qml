@@ -13,6 +13,13 @@ BarWidget {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property bool showPercentage: setting("showPercentage", true) === true
+  readonly property string mountHelper: {
+    var url = Qt.resolvedUrl("mount-share").toString()
+    return url.indexOf("file://") === 0 ? decodeURIComponent(url.substring(7)) : url
+  }
+  property string shareDir: ""
+  property bool mountRunning: false
+  property double nextMountAttempt: 0
   property string watchPath: ""
   property var probeList: []
   property int probeIndex: 0
@@ -33,6 +40,7 @@ BarWidget {
     var configured = String(setting("statusFile", "") || "").trim()
     if (configured !== "") return [configured]
     var found = []
+    if (shareDir !== "") found.push(shareDir + "/omarchy-utm-battery.json")
     if (home !== "") {
       found.push(home + "/Mac/omarchy-utm-battery.json")
       found.push(home + "/Shared/omarchy-utm-battery.json")
@@ -40,6 +48,15 @@ BarWidget {
     found.push("/mnt/utm/omarchy-utm-battery.json")
     found.push("/mnt/share/omarchy-utm-battery.json")
     return found
+  }
+
+  function considerMount() {
+    if (String(setting("statusFile", "") || "").trim() !== "") return
+    if (shareDir !== "" || mountRunning) return
+    if (Date.now() < nextMountAttempt) return
+    mountRunning = true
+    mountProcess.command = [mountHelper]
+    mountProcess.running = true
   }
 
   function poll() {
@@ -63,6 +80,7 @@ BarWidget {
       probing = false
       watchPath = ""
       status = null
+      considerMount()
       return
     }
     var path = probeList[probeIndex]
@@ -135,6 +153,25 @@ BarWidget {
     repeat: true
     triggeredOnStart: true
     onTriggered: root.poll()
+  }
+
+  Process {
+    id: mountProcess
+    running: false
+    stdout: StdioCollector {
+      id: mountOut
+      waitForEnd: true
+    }
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim() !== "") console.warn("ryan.utm-battery", text.trim())
+    }
+    onExited: function(code) {
+      root.mountRunning = false
+      var path = mountOut.text.trim().split("\n")[0]
+      if (code === 0 && path !== "") root.shareDir = path
+      else root.nextMountAttempt = Date.now() + 60000
+    }
   }
 
   FileView {

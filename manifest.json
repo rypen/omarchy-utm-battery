@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "ryan",
   "license": "MIT",
-  "description": "Shows the MacBook battery in the Omarchy bar by reading omarchy-utm-battery.json from a UTM shared folder. While enabled, the widget re-reads that file every five seconds. It does not use the network.",
+  "description": "Shows the MacBook battery in the Omarchy bar by reading omarchy-utm-battery.json from a UTM shared folder. While enabled, the widget re-reads that file every five seconds. If the share is not mounted, the widget mounts it, which can ask for an admin password once. It does not use the network.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "BarWidget.qml"
@@ -27,7 +27,7 @@
         "type": "path",
         "label": "Status file",
         "defaultValue": "",
-        "description": "Guest path of omarchy-utm-battery.json. Empty tries ~/Mac, ~/Shared, /mnt/utm, and /mnt/share."
+        "description": "Guest path of omarchy-utm-battery.json. Empty finds a mounted UTM share, or mounts one at ~/Mac."
       },
       {
         "key": "showPercentage",
