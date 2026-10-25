@@ -18,7 +18,7 @@ omarchy-utm-battery start ~/MacShare
 omarchy-utm-battery stop ~/MacShare
 ```
 
-Share that folder with the UTM guest and mount it at `~/Mac`. The command writes `omarchy-utm-battery.json` there. `start` keeps the file current. `stop` removes it.
+The command writes `omarchy-utm-battery.json` in that folder. `start` keeps the file current. `stop` removes it. Share the folder from the virtual machine's settings.
 
 ## Install the bar widget
 
@@ -26,4 +26,20 @@ Share that folder with the UTM guest and mount it at `~/Mac`. The command writes
 omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
 ```
 
-With no path set, the widget looks for the snapshot at `~/Mac/omarchy-utm-battery.json`, then `~/Shared`, `/mnt/utm`, and `/mnt/share`. The icon shows the percentage. Right-click hides it.
+Mount the shared folder at `~/Mac`. UTM tags a directory share `share`.
+
+Apple Virtualization:
+
+```sh
+mkdir -p ~/Mac
+sudo mount -t virtiofs share ~/Mac
+```
+
+QEMU:
+
+```sh
+mkdir -p ~/Mac
+sudo mount -t 9p -o trans=virtio,version=9p2000.L share ~/Mac
+```
+
+The widget reads `~/Mac/omarchy-utm-battery.json`. If that file is missing, it also checks `~/Shared`, `/mnt/utm`, and `/mnt/share`. The icon shows the percentage. Right-click hides it.
