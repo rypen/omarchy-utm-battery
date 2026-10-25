@@ -26,4 +26,4 @@ That starts the publisher at login and writes `omarchy-utm-battery.json` in the 
 omarchy plugin add https://github.com/rypen/omarchy-utm-battery.git --enable
 ```
 
-The widget uses a UTM directory share that is already mounted. Otherwise it mounts one, usually at `~/Mac`, and may ask for an admin password once. If `~/Mac` already has other files, it uses `~/.local/state/omarchy-utm-battery/share` instead. The icon shows the percentage. Right-click hides it.
+The icon keeps showing the last reading. Click it to open the share panel. If the UTM share is not mounted, choose a folder there and press Mount. That is what asks for the admin password. Right-click hides the percentage.

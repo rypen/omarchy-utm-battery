@@ -5,7 +5,7 @@ import qs.Commons
 import qs.Ui
 import "BatteryStatus.js" as Status
 
-BarWidget {
+Panel {
   id: root
   moduleName: "ryan.utm-battery"
 
@@ -13,13 +13,28 @@ BarWidget {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property bool showPercentage: setting("showPercentage", true) === true
+  readonly property bool verticalBar: bar ? bar.vertical : false
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property string mountHelper: {
     var url = Qt.resolvedUrl("mount-share").toString()
     return url.indexOf("file://") === 0 ? decodeURIComponent(url.substring(7)) : url
   }
+  readonly property string memoryPath: home === "" ? "" : home + "/.local/state/omarchy-utm-battery/last.json"
+  readonly property var dirChoices: {
+    var found = []
+    if (home !== "") {
+      found.push(home + "/Mac")
+      found.push(home + "/.local/state/omarchy-utm-battery/share")
+    }
+    return found
+  }
+
   property string shareDir: ""
+  property string shareState: "none"
+  property string mountDir: ""
   property bool mountRunning: false
-  property double nextMountAttempt: 0
+  property string mountMessage: ""
   property string watchPath: ""
   property var probeList: []
   property int probeIndex: 0
@@ -28,14 +43,23 @@ BarWidget {
   property double probeStarted: 0
   property bool probing: false
   property var status: null
+  property string savedText: ""
 
-  readonly property bool fresh: status && status.present === true && status.stale !== true
-  readonly property string idleIcon: "󰁺"
   readonly property var remaining: Status.estimate(status)
+  readonly property string idleIcon: "󰁺"
 
   visible: true
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
+
+  Component.onCompleted: {
+    if (home !== "") {
+      mountDir = home + "/Mac"
+      mkdirProcess.command = ["mkdir", "-p", home + "/.local/state/omarchy-utm-battery"]
+      mkdirProcess.running = true
+    }
+    refreshShare()
+  }
 
   function candidates() {
     var configured = String(setting("statusFile", "") || "").trim()
@@ -51,18 +75,29 @@ BarWidget {
     return found
   }
 
-  function considerMount() {
-    if (String(setting("statusFile", "") || "").trim() !== "") return
-    if (shareDir !== "" || mountRunning) return
-    if (Date.now() < nextMountAttempt) return
-    mountRunning = true
-    mountProcess.command = [mountHelper]
-    mountProcess.running = true
+  function remember(content, parsed) {
+    if (!parsed || parsed.present !== true) return
+    status = parsed
+    if (content === savedText || memoryPath === "") return
+    savedText = content
+    memoryFile.setText(content)
+  }
+
+  function apply(content) {
+    if (!currentProbe()) return
+    var parsed = Status.parseStatus(String(content || ""), Date.now())
+    if (probing && (!parsed || parsed.present !== true)) {
+      probeIndex += 1
+      openProbe()
+      return
+    }
+    watchPath = statusFile.path
+    probing = false
+    remember(String(content || ""), parsed)
   }
 
   function poll() {
     if (probing && Date.now() - probeStarted < 4000) return
-    considerMount()
     probeStarted = Date.now()
     generation += 1
     inflight = generation
@@ -81,8 +116,6 @@ BarWidget {
     if (probeIndex >= probeList.length) {
       probing = false
       watchPath = ""
-      status = null
-      considerMount()
       return
     }
     var path = probeList[probeIndex]
@@ -90,29 +123,27 @@ BarWidget {
     else statusFile.path = path
   }
 
-  function apply(content) {
-    if (!currentProbe()) return
-    var parsed = Status.parseStatus(String(content || ""), Date.now())
-    if (probing && (!parsed || parsed.stale === true)) {
-      probeIndex += 1
-      openProbe()
-      return
-    }
-    watchPath = statusFile.path
-    probing = false
-    status = parsed
-  }
-
   function miss() {
     if (statusFile.path === "") return
     if (!currentProbe()) return
-    if (!probing) {
-      watchPath = ""
-      status = null
-      return
-    }
+    if (!probing) return
     probeIndex += 1
     openProbe()
+  }
+
+  function refreshShare() {
+    if (mountRunning || mountHelper === "") return
+    if (shareProcess.running) return
+    shareProcess.command = [mountHelper, "status"]
+    shareProcess.running = true
+  }
+
+  function mountChosen() {
+    if (mountRunning || shareState !== "unmounted" || mountDir === "") return
+    mountRunning = true
+    mountMessage = ""
+    mountProcess.command = [mountHelper, "mount", mountDir]
+    mountProcess.running = true
   }
 
   function togglePercentage() {
@@ -126,12 +157,12 @@ BarWidget {
   }
 
   readonly property string percentageLabel: {
-    if (!fresh || !showPercentage || vertical || status.percentage == null) return ""
+    if (!showPercentage || verticalBar || !status || status.percentage == null) return ""
     return strings.t("battery.percent").arg(I18n.formatNumber(status.percentage))
   }
 
   readonly property string tooltipLabel: {
-    if (!fresh) return ""
+    if (!status || status.present !== true) return strings.t("battery.notMounted")
     var lines = [strings.t(Status.stateKey(status.state))]
     lines.push(strings.t("battery.percent").arg(I18n.formatNumber(status.percentage)))
     var left = remaining
@@ -154,7 +185,37 @@ BarWidget {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.poll()
+    onTriggered: {
+      root.refreshShare()
+      root.poll()
+    }
+  }
+
+  Process {
+    id: mkdirProcess
+    running: false
+  }
+
+  Process {
+    id: shareProcess
+    running: false
+    stdout: StdioCollector {
+      id: shareOut
+      waitForEnd: true
+    }
+    onExited: function(code) {
+      var line = shareOut.text.trim().split("\n")[0]
+      if (code === 0 && line.indexOf("mounted ") === 0) {
+        root.shareState = "mounted"
+        root.shareDir = line.substring(8)
+      } else if (code === 0 && line.indexOf("unmounted ") === 0) {
+        root.shareState = "unmounted"
+        root.shareDir = ""
+      } else {
+        root.shareState = "none"
+        root.shareDir = ""
+      }
+    }
   }
 
   Process {
@@ -170,9 +231,33 @@ BarWidget {
     }
     onExited: function(code) {
       root.mountRunning = false
-      var path = mountOut.text.trim().split("\n")[0]
-      if (code === 0 && path !== "") root.shareDir = path
-      else root.nextMountAttempt = Date.now() + 60000
+      var line = mountOut.text.trim().split("\n")[0]
+      if (code === 0 && line.indexOf("mounted ") === 0) {
+        root.shareState = "mounted"
+        root.shareDir = line.substring(8)
+        root.mountMessage = ""
+        root.poll()
+      } else if (code === 2) {
+        root.mountMessage = strings.t("battery.directoryNotEmpty")
+      } else {
+        root.mountMessage = strings.t("battery.mountFailed")
+      }
+    }
+  }
+
+  FileView {
+    id: memoryFile
+    path: root.memoryPath
+    watchChanges: true
+    blockLoading: false
+    printErrors: false
+    onLoaded: {
+      if (root.status) return
+      var parsed = Status.parseStatus(text(), Date.now())
+      if (parsed && parsed.present === true) {
+        root.status = parsed
+        root.savedText = text()
+      }
     }
   }
 
@@ -190,14 +275,123 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.fresh ? Status.batteryIcon(root.status) : root.idleIcon
+    text: root.status && root.status.present === true ? Status.batteryIcon(root.status) : root.idleIcon
     labelText: root.percentageLabel
     tooltipText: root.tooltipLabel
-    active: root.fresh && root.status.state === "discharging" && root.status.percentage <= 15
-    slotSize: Style.bar.iconSlot * (root.showPercentage && !root.vertical ? 2 : 1)
+    active: root.status && root.status.state === "discharging" && root.status.percentage <= 15
+    slotSize: Style.bar.iconSlot * (root.showPercentage && !root.verticalBar ? 2 : 1)
     onPressed: function(button) {
       if (button === Qt.RightButton) root.togglePercentage()
-      else root.poll()
+      else root.toggle()
+    }
+  }
+
+  KeyboardPanel {
+    id: panel
+    anchorItem: button
+    owner: root
+    bar: root.bar
+    open: root.opened
+    focusTarget: panel.loadedContent
+    contentWidth: Style.space(320)
+    contentHeight: panel.fittedContentHeight(panel.loadedContentHeight, Style.space(280))
+
+    content: PanelKeyCatcher {
+      implicitHeight: column.implicitHeight
+      anchors.fill: parent
+      blocked: mountField.activeFocus
+      onCloseRequested: root.close()
+
+      Column {
+        id: column
+        width: parent.width
+        spacing: Style.space(8)
+
+        Text {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          text: root.shareState === "mounted"
+            ? strings.t("battery.mountedAt").arg(root.shareDir)
+            : (root.shareState === "unmounted" ? strings.t("battery.notMounted") : strings.t("battery.noShare"))
+        }
+
+        Text {
+          visible: root.shareState === "unmounted"
+          width: parent.width
+          textFormat: Text.PlainText
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          text: strings.t("battery.chooseDirectory")
+        }
+
+        Repeater {
+          model: root.shareState === "unmounted" ? root.dirChoices : []
+          delegate: Rectangle {
+            required property string modelData
+            width: column.width
+            implicitHeight: choice.implicitHeight + Style.space(8)
+            radius: Style.cornerRadius
+            color: root.mountDir === modelData
+              ? Style.selectedFillFor(root.foreground, Color.accent)
+              : "transparent"
+
+            Text {
+              id: choice
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              leftPadding: Style.space(8)
+              rightPadding: Style.space(8)
+              textFormat: Text.PlainText
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              elide: Text.ElideMiddle
+              text: modelData
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              onClicked: root.mountDir = modelData
+            }
+          }
+        }
+
+        TextField {
+          id: mountField
+          visible: root.shareState === "unmounted"
+          width: parent.width
+          text: root.mountDir
+          font.family: root.fontFamily
+          foreground: root.foreground
+          onTextEdited: root.mountDir = text
+        }
+
+        Button {
+          visible: root.shareState === "unmounted"
+          width: parent.width
+          enabled: !root.mountRunning && root.mountDir !== ""
+          text: root.mountRunning ? strings.t("battery.mounting") : strings.t("battery.mount")
+          foreground: root.foreground
+          onClicked: root.mountChosen()
+        }
+
+        Text {
+          visible: root.mountMessage !== ""
+          width: parent.width
+          wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          text: root.mountMessage
+        }
+      }
     }
   }
 }

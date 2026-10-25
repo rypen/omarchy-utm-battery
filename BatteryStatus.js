@@ -86,7 +86,7 @@ function batteryIcon(status) {
 }
 
 function estimate(status) {
-  if (!status || status.present !== true || status.stale === true) return null
+  if (!status || status.present !== true) return null
   var seconds = null
   var kind = ""
   if (status.state === "discharging") {

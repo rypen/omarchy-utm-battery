@@ -24,34 +24,41 @@ assert_eq() {
   [[ "$got" == "$want" ]] || fail "$label: got [$got] want [$want]"
 }
 
+run() {
+  HOME="$tmp/home" MOUNT_SHARE_SYSFS="$tmp/sysfs" MOUNT_SHARE_MOUNTS="$tmp/mounts" "$@"
+}
+
 setup_device virtio4 9pnet_virtio share
 mounted="$tmp/mounted"
-mkdir -p "$mounted"
+mkdir -p "$mounted" "$tmp/home"
 printf '{}\n' > "$mounted/omarchy-utm-battery.json"
 printf 'TARGET="%s" FSTYPE="9p" SOURCE="share"\n' "$mounted" > "$tmp/mounts"
 
-got=$(HOME="$tmp/home" MOUNT_SHARE_SYSFS="$tmp/sysfs" MOUNT_SHARE_MOUNTS="$tmp/mounts" "$script")
-assert_eq "$got" "$mounted" "uses the share that is already mounted"
+got=$(run "$script" status)
+assert_eq "$got" "mounted $mounted" "reports a mounted share"
 
-rm -f "$tmp/mounts"
-mkdir -p "$tmp/home"
+: > "$tmp/mounts"
+got=$(run "$script" status)
+assert_eq "$got" "unmounted 9p share" "reports an unmounted share"
+
 log="$tmp/log"
-got=$(HOME="$tmp/home" MOUNT_SHARE_SYSFS="$tmp/sysfs" MOUNT_SHARE_MOUNTS="$tmp/mounts" MOUNT_SHARE_DRY=1 MOUNT_SHARE_LOG="$log" "$script")
-assert_eq "$got" "$tmp/home/Mac" "mounts an absent share at ~/Mac"
+got=$(run env MOUNT_SHARE_DRY=1 MOUNT_SHARE_LOG="$log" "$script" mount "$tmp/home/Mac")
+assert_eq "$got" "mounted $tmp/home/Mac" "accepts a chosen directory"
 assert_eq "$(cat "$log")" "9p share $tmp/home/Mac" "plans a 9p mount"
 
 mkdir -p "$tmp/home/Mac"
 printf 'keep\n' > "$tmp/home/Mac/notes"
-: > "$log"
-got=$(HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" MOUNT_SHARE_SYSFS="$tmp/sysfs" MOUNT_SHARE_MOUNTS="$tmp/empty-mounts" MOUNT_SHARE_DRY=1 MOUNT_SHARE_LOG="$log" "$script")
-assert_eq "$got" "$tmp/state/omarchy-utm-battery/share" "picks another directory when ~/Mac is in use"
-assert_eq "$(cat "$log")" "9p share $tmp/state/omarchy-utm-battery/share" "plans the fallback mount"
+if run "$script" mount "$tmp/home/Mac" >"$tmp/out" 2>"$tmp/err"; then
+  fail "mounted a directory that already has files"
+fi
+[[ "$(cat "$tmp/err")" == *"not empty"* ]] || fail "missing not-empty error"
+
+if run "$script" mount "/tmp/../etc" >"$tmp/out" 2>"$tmp/err"; then
+  fail "accepted a directory with .."
+fi
 
 printf 'nope/tag\0' > "$tmp/sysfs/virtio4/mount_tag"
-: > "$log"
-if HOME="$tmp/home2" MOUNT_SHARE_SYSFS="$tmp/sysfs" MOUNT_SHARE_MOUNTS="$tmp/empty-mounts" MOUNT_SHARE_DRY=1 MOUNT_SHARE_LOG="$log" "$script" >"$tmp/out" 2>"$tmp/err"; then
-  fail "accepted a tag with a slash"
-fi
-[[ ! -s "$log" ]] || fail "planned a mount for a bad tag"
+got=$(run "$script" status)
+assert_eq "$got" "none" "rejects a tag with a slash"
 
 echo "ok"

@@ -141,29 +141,84 @@ mount_share() {
   fi
 }
 
-existing=$(mounted_target "" || true)
-if [[ -n "$existing" ]]; then
-  printf '%s\n' "$existing"
-  exit 0
-fi
-
-device=$(best_device || true)
-if [[ -z "$device" ]]; then
-  echo "omarchy-utm-battery: no UTM directory share found" >&2
-  exit 1
-fi
-fstype=${device%% *}
-tag=${device#* }
-already=$(mounted_target "$tag" || true)
-dir=${already:-$(choose_dir)}
-
-if [[ -n "${MOUNT_SHARE_DRY:-}" ]]; then
-  printf '%s\n' "$dir"
-  if [[ -n "${MOUNT_SHARE_LOG:-}" ]]; then
-    printf '%s %s %s\n' "$fstype" "$tag" "$dir" >> "$MOUNT_SHARE_LOG"
+expand_tilde() {
+  local dir="$1"
+  if [[ "$dir" == "~" ]]; then
+    printf '%s\n' "$HOME"
+  elif [[ "$dir" == "~/"* ]]; then
+    printf '%s\n' "$HOME/${dir:2}"
+  else
+    printf '%s\n' "$dir"
   fi
-  exit 0
-fi
+}
 
-mount_share "$fstype" "$tag" "$dir"
-printf '%s\n' "$dir"
+validate_dir() {
+  local dir="$1" part
+  [[ "$dir" == /* ]] || return 1
+  [[ ${#dir} -le 4096 ]] || return 1
+  [[ "$dir" != *$'\n'* ]] || return 1
+  local IFS=/
+  for part in $dir; do
+    [[ "$part" == ".." ]] && return 1
+  done
+  return 0
+}
+
+status_line() {
+  local existing device
+  existing=$(mounted_target "" || true)
+  if [[ -n "$existing" ]]; then
+    printf 'mounted %s\n' "$existing"
+    return 0
+  fi
+  device=$(best_device || true)
+  if [[ -z "$device" ]]; then
+    printf 'none\n'
+    return 0
+  fi
+  printf 'unmounted %s\n' "$device"
+}
+
+mount_at() {
+  local dir existing device fstype tag
+  dir=$(expand_tilde "${1:-}")
+  validate_dir "$dir" || {
+    echo "omarchy-utm-battery: invalid mount directory" >&2
+    exit 1
+  }
+  existing=$(mounted_target "" || true)
+  if [[ -n "$existing" ]]; then
+    printf 'mounted %s\n' "$existing"
+    return 0
+  fi
+  device=$(best_device || true)
+  if [[ -z "$device" ]]; then
+    echo "omarchy-utm-battery: no UTM directory share found" >&2
+    exit 1
+  fi
+  if [[ -d "$dir" ]] && ! mountpoint -q "$dir" 2>/dev/null && [[ -n "$(ls -A "$dir" 2>/dev/null)" ]]; then
+    echo "omarchy-utm-battery: directory is not empty" >&2
+    exit 2
+  fi
+  fstype=${device%% *}
+  tag=${device#* }
+  if [[ -n "${MOUNT_SHARE_DRY:-}" ]]; then
+    printf 'mounted %s\n' "$dir"
+    if [[ -n "${MOUNT_SHARE_LOG:-}" ]]; then
+      printf '%s %s %s\n' "$fstype" "$tag" "$dir" >> "$MOUNT_SHARE_LOG"
+    fi
+    return 0
+  fi
+  mount_share "$fstype" "$tag" "$dir"
+  printf 'mounted %s\n' "$dir"
+}
+
+command="${1:-status}"
+case "$command" in
+  status) status_line ;;
+  mount) mount_at "${2:-}" ;;
+  *)
+    echo "usage: mount-share status | mount <directory>" >&2
+    exit 2
+    ;;
+esac
