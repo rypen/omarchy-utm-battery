@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import qs.Commons as Commons
+import qs.Commons
 import qs.Ui
 import "BatteryStatus.js" as Status
 
@@ -9,7 +9,7 @@ BarWidget {
   id: root
   moduleName: "ryan.utm-battery"
 
-  Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
+  Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property bool showPercentage: setting("showPercentage", true) === true
@@ -125,23 +125,23 @@ BarWidget {
 
   readonly property string percentageLabel: {
     if (!fresh || !showPercentage || vertical || status.percentage == null) return ""
-    return strings.t("battery.percent").arg(Commons.I18n.formatNumber(status.percentage))
+    return strings.t("battery.percent").arg(I18n.formatNumber(status.percentage))
   }
 
   readonly property string tooltipLabel: {
     if (!fresh) return ""
     var lines = [strings.t(Status.stateKey(status.state))]
-    lines.push(strings.t("battery.percent").arg(Commons.I18n.formatNumber(status.percentage)))
+    lines.push(strings.t("battery.percent").arg(I18n.formatNumber(status.percentage)))
     var left = remaining
     if (left) {
       var hoursKey = left.kind === "full" ? "battery.untilFullHours" : "battery.untilEmptyHours"
       var minutesKey = left.kind === "full" ? "battery.untilFullMinutes" : "battery.untilEmptyMinutes"
       if (left.hours > 0) {
         lines.push(strings.t(hoursKey)
-          .arg(Commons.I18n.formatNumber(left.hours))
-          .arg(Commons.I18n.formatNumber(left.minutes)))
+          .arg(I18n.formatNumber(left.hours))
+          .arg(I18n.formatNumber(left.minutes)))
       } else {
-        lines.push(strings.t(minutesKey).arg(Commons.I18n.formatNumber(left.minutes)))
+        lines.push(strings.t(minutesKey).arg(I18n.formatNumber(left.minutes)))
       }
     }
     return lines.join("\n")
@@ -192,7 +192,7 @@ BarWidget {
     labelText: root.percentageLabel
     tooltipText: root.tooltipLabel
     active: root.fresh && root.status.state === "discharging" && root.status.percentage <= 15
-    slotSize: Commons.Style.bar.iconSlot * (root.showPercentage && !root.vertical ? 2 : 1)
+    slotSize: Style.bar.iconSlot * (root.showPercentage && !root.vertical ? 2 : 1)
     onPressed: function(button) {
       if (button === Qt.RightButton) root.togglePercentage()
       else root.poll()
