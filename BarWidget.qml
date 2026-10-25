@@ -386,6 +386,17 @@ Panel {
         }
 
         Text {
+          visible: root.status && root.status.present === true
+          width: parent.width
+          textFormat: Text.PlainText
+          wrapMode: Text.WordWrap
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          text: root.tooltipLabel
+        }
+
+        Text {
           visible: root.shareState === "unmounted" && root.mountDir !== ""
           width: parent.width
           textFormat: Text.PlainText
