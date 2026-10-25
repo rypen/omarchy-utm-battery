@@ -14,11 +14,11 @@ brew install omarchy-utm-battery
 The `v0.1.0` release is not published yet, so that install fails until it is.
 
 ```sh
-omarchy-utm-battery start ~/MacShare
-omarchy-utm-battery stop ~/MacShare
+omarchy-utm-battery set share ~/MacShare
+brew services start omarchy-utm-battery
 ```
 
-The command writes `omarchy-utm-battery.json` in that folder. `start` keeps the file current. `stop` removes it. Share the folder from the virtual machine's settings.
+That starts the publisher at login and writes `omarchy-utm-battery.json` in the saved folder. `brew services stop omarchy-utm-battery` stops it. Share the folder from the virtual machine's settings.
 
 ## Mount the share
 
