@@ -16,6 +16,10 @@ Panel {
   readonly property bool showPercentage: setting("showPercentage", true) === true
   readonly property bool verticalBar: bar ? bar.vertical : false
   readonly property color foreground: bar ? bar.foreground : Color.foreground
+  readonly property color urgent: bar ? bar.urgent : foreground
+  readonly property color track: Style.selectedFillFor(foreground, Color.accent)
+  readonly property real batteryFraction: status && status.percentage != null ? Math.max(0, Math.min(1, status.percentage / 100)) : 0
+  readonly property bool batteryLow: !!(status && status.state === "discharging" && status.percentage <= 15)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property string mountHelper: {
     var url = Qt.resolvedUrl("mount-share").toString()
@@ -394,6 +398,31 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
           text: root.tooltipLabel
+        }
+
+        Item {
+          visible: root.status && root.status.present === true
+          width: parent.width
+          implicitHeight: Math.max(Style.space(4), Math.round(Style.spacing.controlHeight * 0.14))
+
+          Rectangle {
+            id: batteryTrack
+            anchors.fill: parent
+            radius: height / 2
+            color: root.track
+          }
+
+          Rectangle {
+            height: batteryTrack.height
+            radius: batteryTrack.radius
+            width: batteryTrack.width * root.batteryFraction
+            color: root.batteryLow ? root.urgent : root.foreground
+            x: LayoutMirroring.enabled ? batteryTrack.width - width : 0
+
+            Behavior on width {
+              NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
+            }
+          }
         }
 
         Text {
